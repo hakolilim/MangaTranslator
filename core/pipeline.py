@@ -1239,21 +1239,23 @@ def translate_and_render(
                             )
                         except TranslationError as e:
                             error_str = str(e).lower()
+                            # Permanent errors (fail immediately) - only 401, 403, and auth-related
                             critical_tokens = (
-                                "429",
-                                "rate limit",
-                                "rate-limit",
-                                "auth",
+                                "401",
+                                "403",
                                 "unauthorized",
                                 "forbidden",
+                                "api key",
+                                "permission denied",
+                                "auth",
                                 "payment",
                                 "quota",
-                                "empty response",
-                                "api failed",
+                                "insufficient",
                             )
                             if any(token in error_str for token in critical_tokens):
                                 raise
 
+                            # Temporary errors (use placeholder, continue)
                             log_message(f"Translation failed: {e}", always_print=True)
                             translated_texts = [f"[Translation Error: {e}]"] * len(
                                 bubble_images_b64

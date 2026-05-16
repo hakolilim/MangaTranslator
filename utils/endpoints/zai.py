@@ -172,25 +172,28 @@ def call_zai_endpoint(
             status_code = e.response.status_code
             error_text = e.response.text[:500]
 
-            if status_code == 429 and attempt < max_retries:
+            # Permanent errors (fail immediately)
+            permanent_errors = {401, 403}
+            if status_code in permanent_errors:
+                error_reason = f"Status {status_code}: {error_text}"
+                if status_code == 401:
+                    error_reason += " (Check API key)"
+                elif status_code == 403:
+                    error_reason += " (Permission denied, check API key/plan)"
+                log_message(f"Z.ai API HTTP Error: {error_reason}", always_print=True)
+                raise TranslationError(f"Z.ai API HTTP Error: {error_reason}") from e
+            
+            # Temporary errors (retry)
+            if attempt < max_retries:
                 log_message(
-                    f"Rate limited, retrying in {current_delay:.1f}s", verbose=debug
+                    f"HTTP {status_code} error, retrying in {current_delay:.1f}s", verbose=debug
                 )
                 time.sleep(current_delay)
                 continue
             else:
                 error_reason = f"Status {status_code}: {error_text}"
-                if status_code == 429 and attempt == max_retries:
-                    error_reason = (
-                        f"Rate limited after {max_retries + 1} attempts: {error_text}"
-                    )
-                elif status_code == 400:
+                if status_code == 400:
                     error_reason += " (Check payload)"
-                elif status_code == 401:
-                    error_reason += " (Check API key)"
-                elif status_code == 403:
-                    error_reason += " (Permission denied, check API key/plan)"
-
                 log_message(f"Z.ai API HTTP Error: {error_reason}", always_print=True)
                 raise TranslationError(f"Z.ai API HTTP Error: {error_reason}") from e
 
