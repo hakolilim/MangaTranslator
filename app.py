@@ -112,7 +112,7 @@ def main():
     )
 
     app.queue()
-    app.launch(inbrowser=args.open_browser, server_port=args.port, show_error=True)
+    app.launch(inbrowser=args.open_browser, server_port=args.port, show_error=True, share=True)
 
 
 if __name__ == "__main__":
