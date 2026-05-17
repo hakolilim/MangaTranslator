@@ -439,6 +439,13 @@ def create_layout(
                             interactive=False,
                             elem_id="batch_status_message",
                         )
+                        batch_download_archive = gr.File(
+                            label="Download Translated Folder (ZIP)",
+                            file_count="single",
+                            file_types=[".zip"],
+                            type="filepath",
+                            interactive=False,
+                        )
                         with gr.Row():
                             batch_process_button = gr.Button(
                                 "Start Batch Translating", variant="primary"
@@ -2882,12 +2889,13 @@ def create_layout(
             queue=False,
         ).then(fn=None, js=js_reset_status_height, queue=False)
         batch_clear_button.click(
-            fn=lambda: (None, None, None, gr.update(value="", lines=1)),
+            fn=lambda: (None, None, None, gr.update(value="", lines=1), None),
             outputs=[
                 input_files,
                 input_zip,
                 batch_output_gallery,
                 batch_status_message,
+                batch_download_archive,
             ],
             queue=False,
         ).then(fn=None, js=js_reset_status_height, queue=False)
@@ -2966,7 +2974,11 @@ def create_layout(
                 target_device=target_device,
             ),
             inputs=batch_inputs,
-            outputs=[batch_output_gallery, batch_status_message],
+            outputs=[
+                batch_output_gallery,
+                batch_status_message,
+                batch_download_archive,
+            ],
         )
         batch_event.then(
             fn=functools.partial(

@@ -785,7 +785,7 @@ def handle_batch_click(
     fonts_base_dir: Path,
     target_device: Optional[torch.device],
     progress=gr.Progress(track_tqdm=True),
-) -> Tuple[List[str], str]:
+) -> Tuple[List[str], str, Optional[str]]:
     """Callback for the 'Start Batch Translating' button click. Uses dataclasses."""
     input_files = args[0]
     input_zip = args[1] if len(args) > 1 else None
@@ -874,21 +874,23 @@ def handle_batch_click(
             results, backend_config, font_dir_path
         )
         progress(1.0, desc="Batch complete!")
-        return gallery_images, _status_update(status_msg)
+        archive_path = results.get("archive_path")
+        archive_download = str(archive_path) if archive_path else None
+        return gallery_images, _status_update(status_msg), archive_download
 
     except gr.Error as e:
         progress(1.0, desc="Error occurred")
         cleaned = _clean_error_message(e)
         gr.Error(cleaned)
-        return None, _status_update(cleaned)
+        return None, _status_update(cleaned), None
     except CancellationError:
         progress(1.0, desc="Cancelled")
-        return None, _status_update("Batch process cancelled by user.")
+        return None, _status_update("Batch process cancelled by user."), None
     except (ValidationError, FileNotFoundError, ValueError, logic.LogicError) as e:
         progress(1.0, desc="Error occurred")
         cleaned = _clean_error_message(e)
         gr.Error(cleaned)
-        return None, _status_update(cleaned)
+        return None, _status_update(cleaned), None
     except Exception as e:
         progress(1.0, desc="Error occurred")
         import traceback
@@ -898,7 +900,7 @@ def handle_batch_click(
             f"An unexpected error occurred during batch processing: {str(e)}"
         )
         gr.Error(cleaned)
-        return None, _status_update(cleaned)
+        return None, _status_update(cleaned), None
 
 
 def handle_save_config_click(*args: Any) -> str:

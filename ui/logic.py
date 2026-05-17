@@ -78,6 +78,27 @@ def extract_zip_to_temp(
         raise ValidationError(f"Failed to extract ZIP archive: {str(e)}")
 
 
+def create_batch_archive(output_dir: Path) -> Optional[Path]:
+    """Create a ZIP archive for a translated batch output directory."""
+    try:
+        if not output_dir.exists() or not output_dir.is_dir():
+            return None
+
+        archive_path = output_dir.parent / f"{output_dir.name}_translated.zip"
+
+        with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for file_path in output_dir.rglob("*"):
+                if file_path.is_file():
+                    zf.write(file_path, file_path.relative_to(output_dir))
+
+        log_message(f"Created batch archive: {archive_path}", verbose=True)
+        return archive_path
+
+    except Exception as e:
+        log_message(f"Failed to create batch archive: {e}", always_print=True)
+        return None
+
+
 def translate_manga_logic(
     image: Union[str, Path, Image.Image],
     config: MangaTranslatorConfig,
@@ -250,6 +271,7 @@ def process_batch_logic(
             "error_count": int,
             "errors": Dict[str, str],
             "output_path": Path,
+            "archive_path": Optional[Path],
             "processing_time": float
         }
 
@@ -437,6 +459,7 @@ def process_batch_logic(
         processing_time = time.time() - start_time
         results["processing_time"] = processing_time
         results["output_path"] = batch_output_path
+        results["archive_path"] = create_batch_archive(batch_output_path)
 
         log_message(
             f"Batch completed: {results['success_count']} success, "
