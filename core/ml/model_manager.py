@@ -867,28 +867,31 @@ class ModelManager:
                     self.flux_cache_dir / hf_info["filename"],
                     verbose=verbose,
                 )
-                transformer = NunchakuFluxTransformer2dModel.from_pretrained(
-                    str(transformer_path),
-                    torch_dtype=self.dtype,
-                    offload=True,
-                    precision="int4",
-                    set_attention_impl="nunchaku-fp16",
-                )
-                self.models[ModelType.FLUX_TRANSFORMER] = transformer
+                # Nunchaku models don't accept a device parameter; wrap in torch.cuda.device()
+                # so any internal default-device binding uses the correct GPU (e.g. cuda:1 on Kaggle)
+                with torch.cuda.device(self.flux_device):
+                    transformer = NunchakuFluxTransformer2dModel.from_pretrained(
+                        str(transformer_path),
+                        torch_dtype=self.dtype,
+                        offload=True,
+                        precision="int4",
+                        set_attention_impl="nunchaku-fp16",
+                    )
+                    self.models[ModelType.FLUX_TRANSFORMER] = transformer
 
-                # Load text encoder
-                hf_info = self.model_hf_repos[ModelType.FLUX_TEXT_ENCODER]
-                text_encoder_path = self._ensure_hf_file(
-                    hf_info["repo_id"],
-                    hf_info["filename"],
-                    self.flux_cache_dir / hf_info["filename"],
-                    verbose=verbose,
-                )
-                text_encoder = NunchakuT5EncoderModel.from_pretrained(
-                    str(text_encoder_path),
-                    torch_dtype=self.dtype,
-                )
-                self.models[ModelType.FLUX_TEXT_ENCODER] = text_encoder
+                    # Load text encoder
+                    hf_info = self.model_hf_repos[ModelType.FLUX_TEXT_ENCODER]
+                    text_encoder_path = self._ensure_hf_file(
+                        hf_info["repo_id"],
+                        hf_info["filename"],
+                        self.flux_cache_dir / hf_info["filename"],
+                        verbose=verbose,
+                    )
+                    text_encoder = NunchakuT5EncoderModel.from_pretrained(
+                        str(text_encoder_path),
+                        torch_dtype=self.dtype,
+                    )
+                    self.models[ModelType.FLUX_TEXT_ENCODER] = text_encoder
 
                 # Load pipeline
                 pipeline_repo = self.model_hf_repos[ModelType.FLUX_PIPELINE]["repo_id"]
@@ -952,6 +955,10 @@ class ModelManager:
                 repo_id = hf_info["repo_id"]
 
                 log_message(f"Loading SDNQ pipeline from {repo_id}...", verbose=verbose)
+
+                # Pass explicit device string so accelerate CPU offload hooks
+                # target the correct GPU (e.g., cuda:1 on multi-GPU Kaggle) instead of default cuda:0
+                flux_device_str = str(self.flux_device)
                 pipeline = FluxKontextPipeline.from_pretrained(
                     repo_id,
                     torch_dtype=self.dtype,
@@ -978,9 +985,9 @@ class ModelManager:
                         "Using sequential CPU offload (low VRAM mode)...",
                         verbose=verbose,
                     )
-                    pipeline.enable_sequential_cpu_offload()
+                    pipeline.enable_sequential_cpu_offload(device=flux_device_str)
                 else:
-                    pipeline.enable_model_cpu_offload()
+                    pipeline.enable_model_cpu_offload(device=flux_device_str)
 
                 self.models[ModelType.FLUX_KONTEXT_SDNQ_PIPELINE] = pipeline
                 log_message(
@@ -1038,6 +1045,10 @@ class ModelManager:
                 repo_id = hf_info["repo_id"]
 
                 log_message(f"Loading SDNQ pipeline from {repo_id}...", verbose=verbose)
+
+                # Pass explicit device string so accelerate CPU offload hooks
+                # target the correct GPU (e.g., cuda:1 on multi-GPU Kaggle) instead of default cuda:0
+                flux_device_str = str(self.flux_device)
                 pipeline = Flux2KleinPipeline.from_pretrained(
                     repo_id,
                     torch_dtype=self.dtype,
@@ -1064,9 +1075,9 @@ class ModelManager:
                         "Using sequential CPU offload (low VRAM mode)...",
                         verbose=verbose,
                     )
-                    pipeline.enable_sequential_cpu_offload()
+                    pipeline.enable_sequential_cpu_offload(device=flux_device_str)
                 else:
-                    pipeline.enable_model_cpu_offload()
+                    pipeline.enable_model_cpu_offload(device=flux_device_str)
 
                 self.models[model_type] = pipeline
                 log_message(
