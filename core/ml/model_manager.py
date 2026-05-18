@@ -17,7 +17,14 @@ from transformers import (
 )
 from ultralytics import YOLO
 
-from core.device import empty_cache, get_best_device, get_best_dtype, get_device_info
+from core.device import (
+    empty_cache,
+    get_best_device,
+    get_best_dtype,
+    get_device_info,
+    get_flux_device,
+    get_yolo_device,
+)
 from utils.exceptions import ModelError
 from utils.logging import log_message
 
@@ -66,6 +73,11 @@ class ModelManager:
 
             self.device = get_best_device()
             self.dtype = get_best_dtype(self.device)
+            
+            # Separate device for YOLO models
+            self.yolo_device = get_yolo_device()
+            # Separate device for Flux models
+            self.flux_device = get_flux_device()
 
             # Model storage
             self.models = {}
@@ -86,6 +98,14 @@ class ModelManager:
             log_message(
                 f"Model Manager initialized on device: {self.device}", always_print=True
             )
+            if self.yolo_device != self.device:
+                log_message(
+                    f"YOLO models will use device: {self.yolo_device}", always_print=True
+                )
+            if self.flux_device != self.device:
+                log_message(
+                    f"Flux models will use device: {self.flux_device}", always_print=True
+                )
 
     def _init_model_paths(self):
         """Initialize model file paths."""
@@ -479,6 +499,7 @@ class ModelManager:
                 )
 
             model = YOLO(str(path))
+            model.to(self.yolo_device)
             self.models[model_type] = model
             log_message("YOLO model loaded.", verbose=verbose)
             return model
@@ -501,6 +522,7 @@ class ModelManager:
             )
 
             model = YOLO(str(path))
+            model.to(self.yolo_device)
             self.models[ModelType.YOLO_CONJOINED_BUBBLE] = model
             log_message("YOLO conjoined bubble model loaded.", verbose=verbose)
             return model
@@ -530,6 +552,7 @@ class ModelManager:
             )
 
             model = YOLO(str(path))
+            model.to(self.yolo_device)
             self.models[ModelType.YOLO_OSBTEXT] = model
             log_message("YOLO OSB Text model loaded.", verbose=verbose)
             return model
@@ -556,6 +579,7 @@ class ModelManager:
             )
 
             model = YOLO(str(path))
+            model.to(self.yolo_device)
             self.models[ModelType.YOLO_PANEL] = model
             log_message("YOLO panel model loaded.", verbose=verbose)
             return model
@@ -878,7 +902,7 @@ class ModelManager:
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
                     token=effective_token,
-                ).to(self.device)
+                ).to(self.flux_device)
 
                 # Apply caching for faster inference
                 apply_cache_on_pipe(
@@ -932,7 +956,7 @@ class ModelManager:
                     repo_id,
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
-                )
+                ).to(self.flux_device)
 
                 # Enable INT8 MatMul for GPU acceleration (AMD, Intel ARC, NVIDIA)
                 has_gpu = torch.cuda.is_available() or (
@@ -1018,7 +1042,7 @@ class ModelManager:
                     repo_id,
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
-                )
+                ).to(self.flux_device)
 
                 # Enable INT8 MatMul for GPU acceleration (AMD, Intel ARC, NVIDIA)
                 has_gpu = torch.cuda.is_available() or (

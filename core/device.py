@@ -1,7 +1,23 @@
 import gc
+import os
 from typing import Optional
 
 import torch
+
+
+def is_kaggle_environment() -> bool:
+    """Check if the code is running in a Kaggle notebook environment.
+
+    Returns:
+        bool: True if running on Kaggle, False otherwise.
+
+    Examples:
+        >>> if is_kaggle_environment():
+        ...     print("Running on Kaggle")
+    """
+    return "KAGGLE_KERNEL_RUN_TYPE" in os.environ or os.path.exists(
+        "/kaggle"
+    )
 
 
 def get_best_device() -> torch.device:
@@ -223,3 +239,40 @@ def synchronize(device: Optional[torch.device] = None) -> None:
 
     if torch.backends.mps.is_available():
         torch.mps.synchronize()
+
+
+def get_yolo_device() -> torch.device:
+    """Get the device for YOLO models.
+
+    On Kaggle with multiple GPUs, uses GPU 0. Otherwise uses the best available device.
+
+    Returns:
+        torch.device: The device to use for YOLO models.
+
+    Examples:
+        >>> yolo_device = get_yolo_device()
+        >>> yolo_model.to(yolo_device)
+    """
+    if is_kaggle_environment() and torch.cuda.is_available() and torch.cuda.device_count() >= 1:
+        return torch.device("cuda:0")
+    return get_best_device()
+
+
+def get_flux_device() -> torch.device:
+    """Get the device for Flux models.
+
+    On Kaggle with multiple GPUs, uses GPU 1 if available. Otherwise uses the best available device.
+
+    Returns:
+        torch.device: The device to use for Flux models.
+
+    Examples:
+        >>> flux_device = get_flux_device()
+        >>> flux_model.to(flux_device)
+    """
+    if is_kaggle_environment() and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
+        return torch.device("cuda:1")
+    if is_kaggle_environment() and torch.cuda.is_available():
+        return torch.device("cuda:0")
+    return get_best_device()
+

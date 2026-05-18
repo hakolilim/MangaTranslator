@@ -8,7 +8,7 @@ from PIL import Image
 from scipy.ndimage import distance_transform_edt
 
 from core.caching import get_cache
-from core.device import empty_cache, get_best_device, get_best_dtype
+from core.device import empty_cache, get_best_device, get_best_dtype, get_flux_device
 from core.ml.model_manager import get_model_manager
 from utils.logging import log_message
 
@@ -101,7 +101,7 @@ class FluxKontextInpainter:
             backend: 'nunchaku' (CUDA + Nunchaku + HF token) or 'sdnq' (cross-platform).
             low_vram: If True, use sequential CPU offload (SDNQ only).
         """
-        self.DEVICE = device if device is not None else get_best_device()
+        self.DEVICE = device if device is not None else get_flux_device()
         self.DTYPE = get_best_dtype(self.DEVICE)
         self.huggingface_token = huggingface_token
         self.num_inference_steps = num_inference_steps
@@ -947,7 +947,7 @@ class FluxKleinInpainter:
         self.upscale_small_crops = upscale_small_crops
         self.verbose = verbose
 
-        self.DEVICE = device if device is not None else get_best_device()
+        self.DEVICE = device if device is not None else get_flux_device()
         self.DTYPE = get_best_dtype(self.DEVICE)
         self.huggingface_token = huggingface_token
         self.manager = get_model_manager()

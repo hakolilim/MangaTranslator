@@ -7,6 +7,7 @@ It uses YOLO for speech bubble detection and LLMs for text translation.
 
 from ._version import __version__, __version_info__
 from .caching import UnifiedCache, get_cache
+from .device import is_kaggle_environment, get_yolo_device, get_flux_device
 from .image.cleaning import clean_speech_bubbles
 from .image.detection import detect_speech_bubbles
 from .image.image_utils import cv2_to_pil, pil_to_cv2, save_image_with_compression
@@ -38,4 +39,7 @@ __all__ = [
     "OutsideTextDetector",
     "FluxKontextInpainter",
     "FluxKleinInpainter",
+    "is_kaggle_environment",
+    "get_yolo_device",
+    "get_flux_device",
 ]
