@@ -259,12 +259,13 @@ def get_yolo_device() -> torch.device:
 
 
 def get_flux_device() -> torch.device:
-    """Get the device for Flux models.
+    """Get the primary device for Flux diffusion models (transformer / UNet).
 
-    On Kaggle with multiple GPUs, uses GPU 1 if available. Otherwise uses the best available device.
+    On Kaggle with multiple GPUs, uses GPU 1 if available (reserving GPU 0
+    for YOLO & the Flux text encoder). Otherwise uses the best available device.
 
     Returns:
-        torch.device: The device to use for Flux models.
+        torch.device: The device to use for Flux diffusion models.
 
     Examples:
         >>> flux_device = get_flux_device()
@@ -275,4 +276,23 @@ def get_flux_device() -> torch.device:
     if is_kaggle_environment() and torch.cuda.is_available():
         return torch.device("cuda:0")
     return get_best_device()
+
+
+def get_flux_text_encoder_device() -> torch.device:
+    """Get the device for Flux text encoder models (T5-XXL).
+
+    On Kaggle with multiple GPUs, places the text encoder on GPU 0 so that
+    GPU 1 has more VRAM free for the diffusion transformer.  Otherwise uses
+    the same device returned by get_flux_device().
+
+    Returns:
+        torch.device: The device for the Flux text encoder.
+
+    Examples:
+        >>> te_device = get_flux_text_encoder_device()
+        >>> text_encoder.to(te_device)
+    """
+    if is_kaggle_environment() and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
+        return torch.device("cuda:0")
+    return get_flux_device()
 

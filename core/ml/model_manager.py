@@ -23,6 +23,7 @@ from core.device import (
     get_best_dtype,
     get_device_info,
     get_flux_device,
+    get_flux_text_encoder_device,
     get_yolo_device,
 )
 from utils.exceptions import ModelError
@@ -867,8 +868,8 @@ class ModelManager:
                     self.flux_cache_dir / hf_info["filename"],
                     verbose=verbose,
                 )
-                # Nunchaku models don't accept a device parameter; wrap in torch.cuda.device()
-                # so any internal default-device binding uses the correct GPU (e.g. cuda:1 on Kaggle)
+                # Load transformer on GPU 1 (diffusion), text encoder on GPU 0 (T5-XXL ~4.5 GB)
+                flux_te_device = get_flux_text_encoder_device()
                 with torch.cuda.device(self.flux_device):
                     transformer = NunchakuFluxTransformer2dModel.from_pretrained(
                         str(transformer_path),
@@ -879,21 +880,22 @@ class ModelManager:
                     )
                     self.models[ModelType.FLUX_TRANSFORMER] = transformer
 
-                    # Load text encoder
-                    hf_info = self.model_hf_repos[ModelType.FLUX_TEXT_ENCODER]
-                    text_encoder_path = self._ensure_hf_file(
-                        hf_info["repo_id"],
-                        hf_info["filename"],
-                        self.flux_cache_dir / hf_info["filename"],
-                        verbose=verbose,
-                    )
+                # Load text encoder on separate GPU (GPU 0 on multi-GPU Kaggle)
+                hf_info = self.model_hf_repos[ModelType.FLUX_TEXT_ENCODER]
+                text_encoder_path = self._ensure_hf_file(
+                    hf_info["repo_id"],
+                    hf_info["filename"],
+                    self.flux_cache_dir / hf_info["filename"],
+                    verbose=verbose,
+                )
+                with torch.cuda.device(flux_te_device):
                     text_encoder = NunchakuT5EncoderModel.from_pretrained(
                         str(text_encoder_path),
                         torch_dtype=self.dtype,
                     )
                     self.models[ModelType.FLUX_TEXT_ENCODER] = text_encoder
 
-                # Load pipeline
+                # Load pipeline — assign components to their respective devices
                 pipeline_repo = self.model_hf_repos[ModelType.FLUX_PIPELINE]["repo_id"]
                 effective_token = (
                     self.flux_hf_token if self.flux_hf_token else self.hf_token
@@ -905,7 +907,13 @@ class ModelManager:
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
                     token=effective_token,
-                ).to(self.flux_device)
+                )
+                # Strategy: pipeline.to() FIRST moves everything to GPU 1 (safe base),
+                # THEN explicitly relocate text_encoder_2 back to GPU 0.
+                # This avoids diffusers' .to() scanning submodules and overriding
+                # the explicit GPU split later.
+                pipeline.to(self.flux_device)
+                pipeline.text_encoder_2 = pipeline.text_encoder_2.to(flux_te_device)
 
                 # Apply caching for faster inference
                 apply_cache_on_pipe(
@@ -956,14 +964,22 @@ class ModelManager:
 
                 log_message(f"Loading SDNQ pipeline from {repo_id}...", verbose=verbose)
 
-                # Pass explicit device string so accelerate CPU offload hooks
-                # target the correct GPU (e.g., cuda:1 on multi-GPU Kaggle) instead of default cuda:0
                 flux_device_str = str(self.flux_device)
+                flux_te_device_str = str(get_flux_text_encoder_device())
                 pipeline = FluxKontextPipeline.from_pretrained(
                     repo_id,
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
                 ).to(self.flux_device)
+
+                # Split across GPUs: text_encoder_2 on GPU 0 (~4.5 GB), transformer on GPU 1
+                pipeline.text_encoder_2 = pipeline.text_encoder_2.to(
+                    get_flux_text_encoder_device()
+                )
+                log_message(
+                    f"  - text_encoder_2 → {flux_te_device_str}",
+                    verbose=verbose,
+                )
 
                 # Enable INT8 MatMul for GPU acceleration (AMD, Intel ARC, NVIDIA)
                 has_gpu = torch.cuda.is_available() or (
@@ -1046,14 +1062,22 @@ class ModelManager:
 
                 log_message(f"Loading SDNQ pipeline from {repo_id}...", verbose=verbose)
 
-                # Pass explicit device string so accelerate CPU offload hooks
-                # target the correct GPU (e.g., cuda:1 on multi-GPU Kaggle) instead of default cuda:0
                 flux_device_str = str(self.flux_device)
+                flux_te_device_str = str(get_flux_text_encoder_device())
                 pipeline = Flux2KleinPipeline.from_pretrained(
                     repo_id,
                     torch_dtype=self.dtype,
                     cache_dir=str(self.flux_cache_dir),
                 ).to(self.flux_device)
+
+                # Split across GPUs: text_encoder on GPU 0 (~4.5 GB), transformer on GPU 1
+                pipeline.text_encoder = pipeline.text_encoder.to(
+                    get_flux_text_encoder_device()
+                )
+                log_message(
+                    f"  - text_encoder → {flux_te_device_str}",
+                    verbose=verbose,
+                )
 
                 # Enable INT8 MatMul for GPU acceleration (AMD, Intel ARC, NVIDIA)
                 has_gpu = torch.cuda.is_available() or (
